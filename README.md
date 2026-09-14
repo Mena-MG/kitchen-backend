@@ -214,6 +214,23 @@ To test protected endpoints in Swagger:
 - `pageNumber`: Default `1`
 - `pageSize`: Default `20`
 
+#### Create / Update Product Upload Flow (Recommended)
+`POST /api/products` and `PUT /api/products/{id}` now support `multipart/form-data` so the frontend can upload files directly with drag-and-drop.
+
+Supported fields:
+- `Name`, `NameAr`, `Price`, `OriginalPrice`, `UnitType`, `SurfaceType`, `CategoryId`, `CategoryName`, `CategoryNameAr`, `Material`, `MaterialAr`, `Finish`, `FinishAr`, `Color`, `ColorAr`, `ColorHex`, `Thickness`, `OriginCountry`, `OriginCountryAr`, `ShortDescription`, `ShortDescriptionAr`, `Description`, `DescriptionAr`, `Badge`, `BadgeAr`, `IsFeatured`, `IsBestSeller`, `InStock`, `Features`, `FeaturesAr`, `Gallery`
+- Optional file uploads:
+  - `ImageFile` for the main product image
+  - `VideoFile` for the product video
+  - `GalleryFiles` for additional images/videos in the gallery
+- Optional legacy URL fallback:
+  - `ImageUrl`, `VideoUrl`, `Gallery` can still be sent as strings
+
+Upload behavior:
+- If a file is provided, the API uploads it to the server and saves the public URL in the database.
+- If no file is provided, you can still send a direct remote URL.
+- The final stored values are persisted in the `Products` table as `ImageUrl`, `VideoUrl`, and `GalleryJson`.
+
 #### Example Product Object:
 ```json
 {
@@ -266,6 +283,9 @@ To test protected endpoints in Swagger:
 | `DELETE` | `/api/categories/{id}` | Owner | Delete category |
 
 #### Create Category Payload:
+You can send category data as either JSON or multipart form-data.
+
+JSON example:
 ```json
 {
   "name": "Kitchen Islands",
@@ -275,6 +295,13 @@ To test protected endpoints in Swagger:
   "displayOrder": 9
 }
 ```
+
+Multipart upload example (`POST /api/categories` or `PUT /api/categories/{id}`):
+- Form fields: `Name`, `NameAr`, `Slug`, `DisplayOrder`
+- Optional file field: `IconFile`
+- Optional legacy URL fallback: `Icon`
+
+When `IconFile` is sent, the API uploads the image, stores the generated URL in the database, and uses it as the category icon.
 
 ---
 
@@ -399,6 +426,14 @@ To test protected endpoints in Swagger:
 | `POST` | `/api/media/upload-video` | Owner | Upload showroom/craftsmanship video (max 100MB: MP4, WebM) |
 
 *Send payload as `multipart/form-data` with form field key `file`.*
+
+For products and categories, the preferred flow is now the direct multipart upload on the resource endpoints themselves:
+- `POST /api/products`
+- `PUT /api/products/{id}`
+- `POST /api/categories`
+- `PUT /api/categories/{id}`
+
+This gives the frontend a simpler drag-and-drop UX with the same end result: uploaded files are stored on disk and the generated public URL is saved into the database.
 
 #### Upload Response:
 ```json
@@ -582,6 +617,328 @@ export async function checkoutOrder(cartItems, customerInfo, receiptUrl, promoCo
   return response.data; // Created Order with Order ID
 }
 ```
+
+### 5. Creating or Updating Products with Drag-and-Drop Files
+
+The new upload flow is built for a much easier frontend experience. Instead of manually pasting a long image/video URL, the React app can now send a multipart request and let the backend upload the file for you.
+
+#### How the endpoints work
+
+For products:
+- `POST /api/products` creates a product
+- `PUT /api/products/{id}` updates a product
+
+For categories:
+- `POST /api/categories` creates a category
+- `PUT /api/categories/{id}` updates a category
+
+Both resource endpoints now support `multipart/form-data`, which means you can send:
+- normal text fields
+- optional `ImageFile`, `VideoFile`, `GalleryFiles`, or `IconFile`
+- optional URL fallbacks such as `ImageUrl`, `VideoUrl`, or `Icon`
+
+#### Important note
+
+If you send a file, the backend uploads it to the server and stores the generated public URL in the database.
+
+If you do not send a file, the backend still accepts direct URL values, so older frontend code can continue working.
+
+#### Example: product create with files
+
+```javascript
+import api from './apiClient';
+
+export async function createProductWithFiles(product, files) {
+  const formData = new FormData();
+
+  // Required product fields
+  formData.append('Name', product.name);
+  formData.append('NameAr', product.nameAr);
+  formData.append('Price', String(product.price));
+  formData.append('OriginalPrice', String(product.originalPrice || product.price));
+  formData.append('UnitType', product.unitType || 'per_sqm');
+  formData.append('SurfaceType', product.surfaceType || 'none');
+  formData.append('CategoryId', product.categoryId || '');
+  formData.append('CategoryName', product.categoryName || '');
+  formData.append('CategoryNameAr', product.categoryNameAr || '');
+  formData.append('Material', product.material || '');
+  formData.append('MaterialAr', product.materialAr || '');
+  formData.append('Finish', product.finish || '');
+  formData.append('FinishAr', product.finishAr || '');
+  formData.append('Color', product.color || '');
+  formData.append('ColorAr', product.colorAr || '');
+  formData.append('ColorHex', product.colorHex || '');
+  formData.append('Thickness', product.thickness || '');
+  formData.append('OriginCountry', product.originCountry || '');
+  formData.append('OriginCountryAr', product.originCountryAr || '');
+  formData.append('ShortDescription', product.shortDescription || '');
+  formData.append('ShortDescriptionAr', product.shortDescriptionAr || '');
+  formData.append('Description', product.description || '');
+  formData.append('DescriptionAr', product.descriptionAr || '');
+  formData.append('Badge', product.badge || '');
+  formData.append('BadgeAr', product.badgeAr || '');
+  formData.append('IsFeatured', String(Boolean(product.isFeatured)));
+  formData.append('IsBestSeller', String(Boolean(product.isBestSeller)));
+  formData.append('InStock', String(product.inStock !== false));
+
+  // Optional URL fallback if you already have remote URLs
+  if (product.imageUrl) formData.append('ImageUrl', product.imageUrl);
+  if (product.videoUrl) formData.append('VideoUrl', product.videoUrl);
+  if (product.gallery?.length) {
+    formData.append('Gallery', JSON.stringify(product.gallery));
+  }
+
+  // File uploads for drag-and-drop flows
+  if (files?.mainImage) formData.append('ImageFile', files.mainImage);
+  if (files?.video) formData.append('VideoFile', files.video);
+  if (files?.gallery?.length) {
+    files.gallery.forEach((file) => formData.append('GalleryFiles', file));
+  }
+
+  const response = await api.post('/api/products', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+  return response.data;
+}
+```
+
+#### Example: product update with new files
+
+```javascript
+import api from './apiClient';
+
+export async function updateProductWithFiles(id, product, files) {
+  const formData = new FormData();
+
+  formData.append('Name', product.name);
+  formData.append('NameAr', product.nameAr);
+  formData.append('Price', String(product.price));
+  formData.append('OriginalPrice', String(product.originalPrice || product.price));
+  formData.append('UnitType', product.unitType || 'per_sqm');
+  formData.append('SurfaceType', product.surfaceType || 'none');
+  formData.append('CategoryId', product.categoryId || '');
+  formData.append('CategoryName', product.categoryName || '');
+  formData.append('CategoryNameAr', product.categoryNameAr || '');
+  formData.append('Material', product.material || '');
+  formData.append('MaterialAr', product.materialAr || '');
+  formData.append('Finish', product.finish || '');
+  formData.append('FinishAr', product.finishAr || '');
+  formData.append('Color', product.color || '');
+  formData.append('ColorAr', product.colorAr || '');
+  formData.append('ColorHex', product.colorHex || '');
+  formData.append('Thickness', product.thickness || '');
+  formData.append('OriginCountry', product.originCountry || '');
+  formData.append('OriginCountryAr', product.originCountryAr || '');
+  formData.append('ShortDescription', product.shortDescription || '');
+  formData.append('ShortDescriptionAr', product.shortDescriptionAr || '');
+  formData.append('Description', product.description || '');
+  formData.append('DescriptionAr', product.descriptionAr || '');
+  formData.append('Badge', product.badge || '');
+  formData.append('BadgeAr', product.badgeAr || '');
+  formData.append('IsFeatured', String(Boolean(product.isFeatured)));
+  formData.append('IsBestSeller', String(Boolean(product.isBestSeller)));
+  formData.append('InStock', String(product.inStock !== false));
+
+  if (product.imageUrl) formData.append('ImageUrl', product.imageUrl);
+  if (product.videoUrl) formData.append('VideoUrl', product.videoUrl);
+  if (product.gallery?.length) {
+    formData.append('Gallery', JSON.stringify(product.gallery));
+  }
+
+  if (files?.mainImage) formData.append('ImageFile', files.mainImage);
+  if (files?.video) formData.append('VideoFile', files.video);
+  if (files?.gallery?.length) {
+    files.gallery.forEach((file) => formData.append('GalleryFiles', file));
+  }
+
+  const response = await api.put(`/api/products/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+  return response.data;
+}
+```
+
+#### Example: category create with icon file
+
+```javascript
+import api from './apiClient';
+
+export async function createCategoryWithIcon(category, iconFile) {
+  const formData = new FormData();
+
+  formData.append('Name', category.name);
+  formData.append('NameAr', category.nameAr);
+  formData.append('Slug', category.slug || category.name);
+  formData.append('DisplayOrder', String(category.displayOrder || 0));
+
+  // Optional legacy icon URL fallback
+  if (category.icon) {
+    formData.append('Icon', category.icon);
+  }
+
+  // Optional file upload for drag-and-drop UX
+  if (iconFile) {
+    formData.append('IconFile', iconFile);
+  }
+
+  const response = await api.post('/api/categories', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+  return response.data;
+}
+```
+
+#### Example: category update with icon file
+
+```javascript
+import api from './apiClient';
+
+export async function updateCategoryWithIcon(id, category, iconFile) {
+  const formData = new FormData();
+
+  formData.append('Name', category.name);
+  formData.append('NameAr', category.nameAr);
+  formData.append('Slug', category.slug || category.name);
+  formData.append('DisplayOrder', String(category.displayOrder || 0));
+
+  if (category.icon) {
+    formData.append('Icon', category.icon);
+  }
+
+  if (iconFile) {
+    formData.append('IconFile', iconFile);
+  }
+
+  const response = await api.put(`/api/categories/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+  return response.data;
+}
+```
+
+#### Full React example with drag-and-drop
+
+```jsx
+import { useState } from 'react';
+import api from './apiClient';
+
+export default function ProductForm() {
+  const [form, setForm] = useState({
+    name: '',
+    nameAr: '',
+    categoryName: 'Countertops',
+    categoryNameAr: 'أسطح المطبخ',
+    material: 'Quartz',
+    materialAr: 'كوارتز',
+    price: 2000,
+    originalPrice: 2400,
+    description: '',
+    descriptionAr: '',
+    imageUrl: '',
+    videoUrl: '',
+  });
+
+  const [files, setFiles] = useState({
+    mainImage: null,
+    video: null,
+    gallery: [],
+  });
+
+  const handleFileChange = (event) => {
+    const { name, files: selectedFiles } = event.target;
+
+    if (name === 'gallery') {
+      setFiles((prev) => ({ ...prev, gallery: Array.from(selectedFiles) }));
+      return;
+    }
+
+    setFiles((prev) => ({ ...prev, [name]: selectedFiles[0] || null }));
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    const formData = new FormData();
+
+    formData.append('Name', form.name);
+    formData.append('NameAr', form.nameAr);
+    formData.append('Price', String(form.price));
+    formData.append('OriginalPrice', String(form.originalPrice));
+    formData.append('UnitType', 'per_sqm');
+    formData.append('SurfaceType', 'countertop');
+    formData.append('CategoryName', form.categoryName);
+    formData.append('CategoryNameAr', form.categoryNameAr);
+    formData.append('Material', form.material);
+    formData.append('MaterialAr', form.materialAr);
+    formData.append('Description', form.description);
+    formData.append('DescriptionAr', form.descriptionAr);
+    formData.append('IsFeatured', 'true');
+    formData.append('IsBestSeller', 'false');
+    formData.append('InStock', 'true');
+
+    if (form.imageUrl) formData.append('ImageUrl', form.imageUrl);
+    if (form.videoUrl) formData.append('VideoUrl', form.videoUrl);
+
+    if (files.mainImage) formData.append('ImageFile', files.mainImage);
+    if (files.video) formData.append('VideoFile', files.video);
+    if (files.gallery.length) {
+      files.gallery.forEach((file) => formData.append('GalleryFiles', file));
+    }
+
+    try {
+      const response = await api.post('/api/products', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      console.log('Product created:', response.data);
+      alert('Product saved successfully');
+    } catch (error) {
+      console.error(error);
+      alert('Something went wrong while saving the product');
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Product name" />
+      <input value={form.nameAr} onChange={(e) => setForm({ ...form, nameAr: e.target.value })} placeholder="Product name Arabic" />
+      <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} placeholder="Price" />
+      <input type="number" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: Number(e.target.value) })} placeholder="Original price" />
+      <input value={form.categoryName} onChange={(e) => setForm({ ...form, categoryName: e.target.value })} placeholder="Category name" />
+      <input value={form.categoryNameAr} onChange={(e) => setForm({ ...form, categoryNameAr: e.target.value })} placeholder="Category name Arabic" />
+
+      <input type="file" name="mainImage" onChange={handleFileChange} accept="image/*" />
+      <input type="file" name="video" onChange={handleFileChange} accept="video/*" />
+      <input type="file" name="gallery" onChange={handleFileChange} accept="image/*" multiple />
+
+      <input value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} placeholder="Optional image URL" />
+      <input value={form.videoUrl} onChange={(e) => setForm({ ...form, videoUrl: e.target.value })} placeholder="Optional video URL" />
+
+      <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description" />
+      <textarea value={form.descriptionAr} onChange={(e) => setForm({ ...form, descriptionAr: e.target.value })} placeholder="Description Arabic" />
+
+      <button type="submit">Save Product</button>
+    </form>
+  );
+}
+```
+
+#### What this does in practice
+
+1. The React form collects product details.
+2. The user can either:
+   - choose a local image/video file, or
+   - paste an image/video URL manually
+3. The frontend sends the data using `FormData`.
+4. The backend receives the request and saves the uploaded media to `wwwroot/uploads`.
+5. The generated public URL is stored in the database (`ImageUrl`, `VideoUrl`, `GalleryJson`).
+6. The API returns the created product object with the saved media URLs.
+
+> This is the recommended pattern for admin pages, CMS tools, and product management dashboards.
 
 ---
 

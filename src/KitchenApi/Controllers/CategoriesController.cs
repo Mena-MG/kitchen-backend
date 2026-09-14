@@ -4,6 +4,7 @@ using KitchenApi.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Hosting;
 
 namespace KitchenApi.Controllers;
 
@@ -12,10 +13,12 @@ namespace KitchenApi.Controllers;
 public class CategoriesController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IWebHostEnvironment _env;
 
-    public CategoriesController(AppDbContext context)
+    public CategoriesController(AppDbContext context, IWebHostEnvironment env)
     {
         _context = context;
+        _env = env;
     }
 
     /// <summary>
@@ -47,10 +50,23 @@ public class CategoriesController : ControllerBase
     /// Create new category (Owner only)
     /// </summary>
     [HttpPost]
+    [Consumes("multipart/form-data")]
     [Authorize(Roles = "Owner")]
-    public async Task<ActionResult<CategoryResponseDto>> CreateCategory([FromBody] CreateCategoryDto dto)
+    public async Task<ActionResult<CategoryResponseDto>> CreateCategory([FromForm] CreateCategoryDto dto)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        try
+        {
+            if (dto.IconFile != null)
+            {
+                dto.Icon = await SaveUploadedFileAsync(dto.IconFile, "images");
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
 
         var id = !string.IsNullOrWhiteSpace(dto.Id)
             ? dto.Id
@@ -85,9 +101,22 @@ public class CategoriesController : ControllerBase
     /// Update category (Owner only)
     /// </summary>
     [HttpPut("{id}")]
+    [Consumes("multipart/form-data")]
     [Authorize(Roles = "Owner")]
-    public async Task<ActionResult<CategoryResponseDto>> UpdateCategory(string id, [FromBody] CreateCategoryDto dto)
+    public async Task<ActionResult<CategoryResponseDto>> UpdateCategory(string id, [FromForm] CreateCategoryDto dto)
     {
+        try
+        {
+            if (dto.IconFile != null)
+            {
+                dto.Icon = await SaveUploadedFileAsync(dto.IconFile, "images");
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
         var category = await _context.Categories.FindAsync(id);
         if (category == null) return NotFound(new { message = $"Category '{id}' not found." });
 
@@ -125,5 +154,41 @@ public class CategoriesController : ControllerBase
         await _context.SaveChangesAsync();
 
         return NoContent();
+    }
+
+    private async Task<string> SaveUploadedFileAsync(IFormFile file, string folderName)
+    {
+        if (file == null || file.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp", ".svg", ".gif" };
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+
+        if (!allowedExtensions.Contains(ext))
+        {
+            throw new InvalidOperationException($"Unsupported icon format. Allowed extensions: {string.Join(", ", allowedExtensions)}");
+        }
+
+        if (file.Length > 15 * 1024 * 1024)
+        {
+            throw new InvalidOperationException("Icon file exceeds the 15MB size limit.");
+        }
+
+        var uploadsFolder = Path.Combine(_env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", folderName);
+        Directory.CreateDirectory(uploadsFolder);
+
+        var uniqueFileName = $"icon_{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}_{Guid.NewGuid().ToString("N")[..8]}{ext}";
+        var filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+        await using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        var request = HttpContext.Request;
+        var baseUrl = $"{request.Scheme}://{request.Host}";
+        return $"{baseUrl}/uploads/{folderName}/{uniqueFileName}";
     }
 }

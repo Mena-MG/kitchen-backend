@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http;
 
 namespace KitchenApi.DTOs.Products;
 
@@ -53,6 +54,12 @@ public class CreateProductDto
     public string ImageUrl { get; set; } = string.Empty;
 
     public string VideoUrl { get; set; } = string.Empty;
+
+    public IFormFile? ImageFile { get; set; }
+
+    public IFormFile? VideoFile { get; set; }
+
+    public List<IFormFile>? GalleryFiles { get; set; }
 
     public string Badge { get; set; } = string.Empty;
 

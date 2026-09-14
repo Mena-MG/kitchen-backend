@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http;
 
 namespace KitchenApi.DTOs.Categories;
 
@@ -15,6 +16,8 @@ public class CreateCategoryDto
     public string NameAr { get; set; } = string.Empty;
 
     public string Icon { get; set; } = string.Empty;
+
+    public IFormFile? IconFile { get; set; }
 
     public string Slug { get; set; } = string.Empty;
 
