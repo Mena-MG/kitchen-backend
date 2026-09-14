@@ -927,6 +927,198 @@ export default function ProductForm() {
 }
 ```
 
+#### Small copy-paste React component with drag-and-drop
+
+If you want a shorter admin example, this is a good starting point for a React/Vite page:
+
+```jsx
+import { useState } from 'react';
+import api from './apiClient';
+
+export default function ProductUploadForm() {
+  const [product, setProduct] = useState({
+    name: '',
+    nameAr: '',
+    price: 0,
+    originalPrice: 0,
+    categoryName: '',
+    categoryNameAr: '',
+    material: '',
+    materialAr: '',
+    description: '',
+    descriptionAr: '',
+    imageUrl: '',
+    videoUrl: '',
+  });
+
+  const [dragActive, setDragActive] = useState(false);
+  const [mainImage, setMainImage] = useState(null);
+  const [videoFile, setVideoFile] = useState(null);
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+
+    const files = [...e.dataTransfer.files];
+    if (!files.length) return;
+
+    const image = files.find((file) => file.type.startsWith('image/'));
+    const video = files.find((file) => file.type.startsWith('video/'));
+
+    if (image) setMainImage(image);
+    if (video) setVideoFile(video);
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    const formData = new FormData();
+
+    formData.append('Name', product.name);
+    formData.append('NameAr', product.nameAr);
+    formData.append('Price', String(product.price));
+    formData.append('OriginalPrice', String(product.originalPrice || product.price));
+    formData.append('UnitType', 'per_sqm');
+    formData.append('SurfaceType', 'countertop');
+    formData.append('CategoryName', product.categoryName);
+    formData.append('CategoryNameAr', product.categoryNameAr);
+    formData.append('Material', product.material);
+    formData.append('MaterialAr', product.materialAr);
+    formData.append('Description', product.description);
+    formData.append('DescriptionAr', product.descriptionAr);
+    formData.append('IsFeatured', 'true');
+    formData.append('IsBestSeller', 'false');
+    formData.append('InStock', 'true');
+
+    if (product.imageUrl) formData.append('ImageUrl', product.imageUrl);
+    if (product.videoUrl) formData.append('VideoUrl', product.videoUrl);
+
+    if (mainImage) formData.append('ImageFile', mainImage);
+    if (videoFile) formData.append('VideoFile', videoFile);
+
+    try {
+      const response = await api.post('/api/products', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      console.log('Saved product:', response.data);
+      alert('Product saved successfully');
+    } catch (error) {
+      console.error(error);
+      alert('Failed to save product');
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
+      <h3>Create Product</h3>
+
+      <input
+        value={product.name}
+        onChange={(e) => setProduct({ ...product, name: e.target.value })}
+        placeholder="Product name"
+      />
+
+      <input
+        value={product.nameAr}
+        onChange={(e) => setProduct({ ...product, nameAr: e.target.value })}
+        placeholder="Product name Arabic"
+      />
+
+      <input
+        type="number"
+        value={product.price}
+        onChange={(e) => setProduct({ ...product, price: Number(e.target.value) })}
+        placeholder="Price"
+      />
+
+      <input
+        type="number"
+        value={product.originalPrice}
+        onChange={(e) => setProduct({ ...product, originalPrice: Number(e.target.value) })}
+        placeholder="Original price"
+      />
+
+      <input
+        value={product.categoryName}
+        onChange={(e) => setProduct({ ...product, categoryName: e.target.value })}
+        placeholder="Category name"
+      />
+
+      <input
+        value={product.categoryNameAr}
+        onChange={(e) => setProduct({ ...product, categoryNameAr: e.target.value })}
+        placeholder="Category name Arabic"
+      />
+
+      <input
+        value={product.material}
+        onChange={(e) => setProduct({ ...product, material: e.target.value })}
+        placeholder="Material"
+      />
+
+      <input
+        value={product.materialAr}
+        onChange={(e) => setProduct({ ...product, materialAr: e.target.value })}
+        placeholder="Material Arabic"
+      />
+
+      <textarea
+        value={product.description}
+        onChange={(e) => setProduct({ ...product, description: e.target.value })}
+        placeholder="Description"
+      />
+
+      <textarea
+        value={product.descriptionAr}
+        onChange={(e) => setProduct({ ...product, descriptionAr: e.target.value })}
+        placeholder="Description Arabic"
+      />
+
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={onDrop}
+        style={{
+          border: `2px dashed ${dragActive ? '#4f46e5' : '#cbd5e1'}`,
+          padding: 18,
+          borderRadius: 12,
+          background: dragActive ? '#eef2ff' : '#f8fafc',
+        }}
+      >
+        Drag and drop image/video here
+      </div>
+
+      <label>
+        Optional image URL:
+        <input
+          value={product.imageUrl}
+          onChange={(e) => setProduct({ ...product, imageUrl: e.target.value })}
+          placeholder="https://..."
+        />
+      </label>
+
+      <label>
+        Optional video URL:
+        <input
+          value={product.videoUrl}
+          onChange={(e) => setProduct({ ...product, videoUrl: e.target.value })}
+          placeholder="https://..."
+        />
+      </label>
+
+      <input type="file" accept="image/*" onChange={(e) => setMainImage(e.target.files?.[0] || null)} />
+      <input type="file" accept="video/*" onChange={(e) => setVideoFile(e.target.files?.[0] || null)} />
+
+      <button type="submit">Save Product</button>
+    </form>
+  );
+}
+```
+
 #### What this does in practice
 
 1. The React form collects product details.
