@@ -101,7 +101,7 @@ public class AuthController : ControllerBase
         if (!result)
             return BadRequest(new { Message = "Invalid or already revoked token." });
 
-        return Ok(new { Message = "Token revoked successfully." });
+        return NoContent();
     }
 
     /// <summary>

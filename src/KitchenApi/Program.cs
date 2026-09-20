@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -79,6 +80,13 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -126,7 +134,8 @@ builder.Services.AddCors(options =>
             "http://localhost:5174",
             "http://localhost:3000",          // Alternative dev
             "https://kitchen-mena-mg.vercel.app", // Vercel production
-            "https://kitchen-2i5f460yw-mmms-projects-41242de5.vercel.app" // Vercel preview
+            "https://kitchen-2i5f460yw-mmms-projects-41242de5.vercel.app", // Vercel preview
+            "https://almontal.vercel.app" // Current frontend
         )
         .AllowAnyHeader()
         .AllowAnyMethod()
@@ -138,6 +147,8 @@ builder.Services.AddCors(options =>
 // BUILD THE APP
 // ══════════════════════════════════════════════════════════════
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 // ══════════════════════════════════════════════════════════════
 // 7. SEED DATABASE — Roles + Initial Owner + E-Commerce Data

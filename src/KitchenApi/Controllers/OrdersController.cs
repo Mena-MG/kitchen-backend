@@ -37,7 +37,7 @@ public class OrdersController : ControllerBase
     /// Get single order details by Order ID
     /// </summary>
     [HttpGet("{id}")]
-    [AllowAnonymous]
+    [Authorize]
     public async Task<ActionResult<OrderResponseDto>> GetOrder(string id)
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);

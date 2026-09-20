@@ -81,8 +81,10 @@ public class ProductService : IProductService
         // Sorting
         dbQuery = query.SortBy?.ToLower() switch
         {
-            "price_asc" => dbQuery.OrderBy(p => p.Price),
-            "price_desc" => dbQuery.OrderByDescending(p => p.Price),
+            "price" or "price_asc" => dbQuery.OrderBy(p => p.Price),
+            "-price" or "price_desc" => dbQuery.OrderByDescending(p => p.Price),
+            "name" => dbQuery.OrderBy(p => p.Name),
+            "-name" => dbQuery.OrderByDescending(p => p.Name),
             "rating" => dbQuery.OrderByDescending(p => p.Rating),
             "popular" => dbQuery.OrderByDescending(p => p.ReviewsCount),
             _ => dbQuery.OrderByDescending(p => p.CreatedAt)
